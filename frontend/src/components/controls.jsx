@@ -1,22 +1,27 @@
 import { useState } from "react";
-import { ButtonGroup, Button, Card, CardBody } from "@nextui-org/react";
+import {
+  ButtonGroup,
+  Button,
+  Card,
+  Popover,
+  PopoverTrigger,
+  PopoverContent,
+  Snippet,
+} from "@nextui-org/react";
 import Microphone from "../icons/microphone";
 import Camera from "../icons/camera";
 import MenuIcon from "../icons/menu";
 import InfoIcon from "../icons/info";
-import ChatIcon from "../icons/chat";
 import { useControls } from "../contexts/controlsContext";
+import { useRoomInfo } from "../contexts/roomInfoContext";
 
 export default function Controls() {
   const controls = useControls();
+  const { roomId } = useRoomInfo();
 
   const handleMenuToggle = () => {
     console.log("menu toggle");
     controls.setIsSettingsOn(!controls.isSettingsOn);
-  };
-
-  const handleInfoToggle = () => {
-    console.log("info toggle");
   };
 
   const handleChatToggle = () => {
@@ -61,14 +66,24 @@ export default function Controls() {
         >
           <MenuIcon />
         </Button>
-        <Button
-          className="mx-2"
-          isIconOnly
-          variant="light"
-          onPress={handleInfoToggle}
-        >
-          <InfoIcon />
-        </Button>
+        <Popover>
+          <PopoverTrigger>
+            <Button className="mx-2" isIconOnly variant="light">
+              <InfoIcon />
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent>
+            <div className="px-1 py-2">
+              <div className=" text-base font-bold">Meeting info</div>
+              <div className="text-sm p-2">
+                Meeting ID:
+                <Snippet hideSymbol="true" size="sm" variant="flat">
+                  {roomId}
+                </Snippet>
+              </div>
+            </div>
+          </PopoverContent>
+        </Popover>
       </ButtonGroup>
     </Card>
   );

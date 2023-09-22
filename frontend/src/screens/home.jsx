@@ -13,13 +13,17 @@ import {
 } from "@nextui-org/react";
 import { useSocket } from "../contexts/socketContext";
 import { useNavigate } from "react-router-dom";
+import { useRoomInfo } from "../contexts/roomInfoContext";
+import { useUserDetails } from "../contexts/userContext";
 
 export default function Home() {
   const socket = useSocket();
   const navigate = useNavigate();
+  const roomInfo = useRoomInfo();
+  const userDetails = useUserDetails();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
-  const [code, setCode] = useState("");
+  const [roomId, setCode] = useState("");
   const { isOpen, onOpen, onClose } = useDisclosure();
   const [formType, setFormType] = React.useState("join"); // ["join", "create"]
   const [modalDetails, setModalDetails] = useState({
@@ -36,7 +40,7 @@ export default function Home() {
       setFormType("join");
       setModalDetails({
         header: "Join Meet",
-        body: "Enter your name, email and the meeting code to join the meet",
+        body: "Enter your name, email and the meeting roomId to join the meet",
         footer: {
           cancel: "Cancel",
           ok: "Join",
@@ -56,30 +60,40 @@ export default function Home() {
     onOpen();
   };
 
-  const handleJoinMeetClick = (e) => {
-    socket.emit("join-meet", { name, email, code });
+  const handleRoomJoinedClick = (e) => {
+    socket.emit("join-room", {
+      name,
+      email,
+      roomId,
+      userId: userDetails.userId,
+    });
     onClose();
   };
 
   const handleCreateMeetClick = (e) => {
-    const socket = useSocket();
-    socket.emit("create-meet", { name, email });
+    socket.emit("create-room", { name, email, userId: userDetails.userId });
     onClose();
   };
 
-  const handleJoinMeet = useCallback(
-    ({ name, email, code }) => {
-      navigate(`/meet/${code}`);
+  const handleRoomJoined = useCallback(
+    ({ roomId, participants, author }) => {
+      console.log("room joined", roomId, participants, author);
+      roomInfo.updateRoomInfo({ roomId, participants, author });
+      userDetails.setName(name);
+      userDetails.setEmail(email);
+      navigate(`/room/${roomId}`);
     },
     [navigate]
   );
 
   useEffect(() => {
-    socket.on("join-meet", handleJoinMeet);
+    const uid = Math.random().toString(36).substring(7);
+    userDetails.setUserId(uid);
+    socket.on("room-joined", handleRoomJoined);
     return () => {
-      socket.off("join-meet", handleJoinMeet);
+      socket.off("room-joined", handleRoomJoined);
     };
-  }, [socket, handleJoinMeet]);
+  }, [socket, handleRoomJoined]);
 
   return (
     <div className="h-screen">
@@ -134,8 +148,8 @@ export default function Home() {
                   type="text"
                   label="Code"
                   labelPlacement="outside"
-                  placeholder="Enter the code here."
-                  value={code}
+                  placeholder="Enter the roomId here."
+                  value={roomId}
                   onChange={(e) => setCode(e.target.value)}
                   required
                 />
@@ -156,7 +170,7 @@ export default function Home() {
                 size="small"
                 onPress={
                   formType === "join"
-                    ? handleJoinMeetClick
+                    ? handleRoomJoinedClick
                     : handleCreateMeetClick
                 }
               >

@@ -1,16 +1,24 @@
 import { Card } from "@nextui-org/react";
-import React from "react";
+import React, { forwardRef } from "react";
 
-export default function VideoPlayer({ stream, name }) {
+const VideoPlayer = forwardRef(({ stream, name, mute }, ref) => {
+  const handleRefs = (videoRef) => {
+    if (videoRef) {
+      videoRef.srcObject = stream;
+    }
+  };
+
   return (
     <Card className="w-60 h-36 object-cover rounded-lg">
       <video
         className="w-60 h-36 object-cover rounded-lg"
         autoPlay
         playsInline
-        ref={(ref) => {
+        muted={mute}
+        ref={(videoRef) => {
+          handleRefs(videoRef);
           if (ref) {
-            ref.srcObject = stream;
+            ref.current = videoRef;
           }
         }}
       />
@@ -23,4 +31,6 @@ export default function VideoPlayer({ stream, name }) {
       </Card>
     </Card>
   );
-}
+});
+
+export default VideoPlayer;
