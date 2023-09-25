@@ -21,6 +21,22 @@ class PeerService {
       return offer;
     }
   };
+
+  setAnswer = async (answer) => {
+    if (this.peer) {
+      await this.peer.setRemoteDescription(
+        new RTCSessionDescription(answer)
+      );
+    }
+  }
+
+  setCandidate = async (candidate) => {
+    if (this.peer) {
+      await this.peer.addIceCandidate(candidate);
+    }
+  }
+
+  
 }
 
 export default new PeerService();

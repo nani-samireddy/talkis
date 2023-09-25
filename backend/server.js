@@ -6,7 +6,7 @@ const Room = require("./models/room");
 const Participant = require("./models/participant");
 const io = require("socket.io")(server, {
   cors: {
-    origin: "http://127.0.0.1:5173",
+    origin: "https://127.0.0.1:5173",
     methods: ["GET", "POST"],
   },
 });
@@ -63,14 +63,18 @@ io.on("connection", (socket) => {
     const room = new Room(author);
     rooms.push(room);
     socket.join(room.getRoomId());
-    io.to(socket.id).emit("room-joined", room.getRoomInfo());
-    io.to(room.getRoomId()).emit("user-joined", room.getRoomInfo());
-    // socket.on("signal", (data) => {
-    //   io.to(data.to).emit("signal", {
-    //     from: socket.id,
-    //     data: data.data,
-    //   });
-    // });
+    io.to(socket.id).emit("room-joined", {
+      roomId: room.getRoomId(),
+      participants: room.getParticipants(),
+      author: author,
+      user: author,
+    });
+    io.to(room.getRoomId()).emit("user-joined", {
+      roomId: room.getRoomId(),
+      participants: room.getParticipants(),
+      author: author,
+      user: author,
+    });
   });
 
   // join room or create room
@@ -86,7 +90,12 @@ io.on("connection", (socket) => {
     }
     socket.join(room.getRoomId());
     io.to(socket.id).emit("room-joined", room.getRoomInfo());
-    io.to(room.getRoomId()).emit("user-joined", room.getRoomInfo());
+    io.to(room.getRoomId()).emit("user-joined", {
+      roomId: room.getRoomId(),
+      participants: room.getParticipants(),
+      author: room.getAuthor(),
+      user: participant,
+    });
     // socket.on("signal", (data) => {
     //   io.to(data.to).emit("signal", {
     //     from: socket.id,

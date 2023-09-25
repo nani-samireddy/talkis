@@ -7,7 +7,7 @@ import { Card } from "@nextui-org/react";
 import { useControls } from "../contexts/controlsContext";
 import { useRoomInfo } from "../contexts/roomInfoContext";
 import VideoPlayer from "../components/videoPlayer";
-
+import Peer from "simple-peer";
 import { useUserDetails } from "../contexts/userContext";
 
 export default function Meet() {
@@ -18,6 +18,7 @@ export default function Meet() {
   const userDetails = useUserDetails();
   const [myStream, setMyStream] = useState(null);
   const remoteVideoRefs = useRef({});
+  const [peers, setPeers] = useState([]);
 
   // const handleUserCall = useCallback(async () => {
   //   const stream = await navigator.mediaDevices.getUserMedia({
@@ -27,13 +28,68 @@ export default function Meet() {
   //   setMyStream(stream);
   // }, []);
 
-  const handleUserJoined = useCallback(({ roomId, participants, author }) => {
-    console.log("user-joined", participants, author);
-    roomInfo.updateRoomInfo({ roomId, participants, author });
-  }, []);
+  const handleUserJoined = useCallback(
+    ({ roomId, participants, author, user }) => {
+      console.log("user-joined", participants, author);
+      roomInfo.updateRoomInfo({ roomId, participants, author });
+      // creating peer connection with initiator as true
+      const peer = new Peer({
+        initiator: true,
+        trickle: false,
+        stream: myStream,
+        config: {
+          iceServers: [
+            {
+              urls: [
+                "stun:stun.l.google.com:19302",
+                "stun:global.stun.twilio.com:3478",
+              ],
+            },
+          ],
+        },
+      });
+      // adding stream to peer connection
+      peer.on("signal", (offer) => {
+        console.log("offer", offer);
+        socket.emit("signal", {
+          roomId,
+          userId: userDetails.userId,
+          signal: { type: "offer", data: offer },
+        });
+      });
+
+      peer.on("stream", (userStream) => {
+        setPeers((peers) => [
+          ...peers,
+          { peerId: user.userId, stream: userStream },
+        ]);
+      });
+
+      peer.on("close", () => {
+        const index = remoteVideoRefs.current.findIndex(
+          (p) => p.peerId === user.userId
+        );
+        if (index !== -1) {
+          remoteVideoRefs.current.splice(index, 1);
+          setPeers(remoteVideoRefs.current);
+        }
+      });
+
+      remoteVideoRefs.current.push({ peerId: user.userId, peer });
+    },
+    []
+  );
   const handleUserLeft = useCallback(({ participants, user }) => {
     console.log("user-left", user);
     roomInfo.setParticipants(participants);
+    const index = remoteVideoRefs.current.findIndex(
+      (p) => p.peerId === user.userId
+    );
+    if (index !== -1) {
+      remoteVideoRefs.current[index].peer.destroy();
+      remoteVideoRefs.current.splice(index, 1);
+    }
+    setPeers((peers) => peers.filter((p) => p.peerId !== user.userId));
   }, []);
 
   useEffect(() => {
@@ -47,19 +103,85 @@ export default function Meet() {
     };
   }, [socket, handleUserJoined, handleUserLeft]);
 
+  // useEffect(() => {
+  //   socket.on("signal", ({ userId, signal }) => {
+  //     console.log("signal recived", userId, signal);
+  //     console.log(remoteVideoRefs.current);
+  //     if (signal.type === "stream") {
+  //       const remoteVideoRef = remoteVideoRefs.current[userId];
+  //       if (remoteVideoRef) {
+  //         remoteVideoRef.srcObject = new MediaStream([signal.data]);
+  //       }
+  //     }
+  //   });
+  //   return () => {
+  //     socket.off("signal");
+  //     remoteVideoRefs.current = {};
+  //   };
+  // }, []);
+
   useEffect(() => {
-    socket.on("signal", ({ userId, signal }) => {
-      console.log("signal recived", userId, signal);
-      console.log(remoteVideoRefs.current);
-      if (signal.type === "stream") {
-        const remoteVideoRef = remoteVideoRefs.current[userId];
-        if (remoteVideoRef) {
-          remoteVideoRef.srcObject = new MediaStream([signal.data]);
+    socket.on("receive-offer", ({ userId, offer }) => {
+      const peer = new Peer({
+        initiator: false,
+        trickle: false,
+        stream: myStream,
+        config: {
+          iceServers: [
+            {
+              urls: [
+                "stun:stun.l.google.com:19302",
+                "stun:global.stun.twilio.com:3478",
+              ],
+            },
+          ],
+        },
+      });
+      peer.on("signal", (answer) => {
+        console.log("answer", answer);
+        socket.emit("signal", {
+          roomId: roomInfo.roomId,
+          userId: userDetails.userId,
+          signal: { type: "answer", data: answer },
+        });
+      });
+
+      peer.on("stream", (userStream) => {
+        setPeers((peers) => [...peers, { peerId: userId, stream: userStream }]);
+      });
+
+      peer.on("close", () => {
+        const index = remoteVideoRefs.current.findIndex(
+          (p) => p.peerId === userId
+        );
+        if (index !== -1) {
+          remoteVideoRefs.current.splice(index, 1);
+          setPeers((peers) => peers.filter((p) => p.peerId !== userId));
         }
+      });
+
+      peer.signal(offer);
+      remoteVideoRefs.current.push({ peerId: userId, peer });
+    });
+
+    socket.on("receive-answer", ({ userId, answer }) => {
+      const peer = remoteVideoRefs.current.find((p) => p.peerId === userId);
+      if (peer) {
+        peer.signal(answer);
       }
     });
+
+    socket.on("receive-ice-candidate", ({ userId, candidate }) => {
+      const peer = remoteVideoRefs.current.find((p) => p.peerId === userId);
+      if (peer) {
+        peer.signal(candidate);
+      }
+    });
+
     return () => {
-      socket.off("signal");
+      socket.off("receive-offer");
+      socket.off("receive-answer");
+      socket.off("receive-ice-candidate");
       remoteVideoRefs.current = {};
     };
   }, []);
@@ -90,10 +212,6 @@ export default function Meet() {
       });
   }, [socket, controls.isMicOn, controls.isVideoOn]);
 
-  const handleRemoteVideoRef = (userId, ref) => {
-    remoteVideoRefs.current[userId] = ref;
-  };
-
   return (
     <div className="relative h-screen">
       <Navbar />
@@ -103,29 +221,21 @@ export default function Meet() {
       </div>
 
       <div className="flex flex-wrap justify-center">
-        {roomInfo.participants
-          .filter((p) => p.userId !== userDetails.userId)
-          .map((p) => (
-            <div key={p.socketId} className="flex p-2">
-              <Card className="w-60 h-36 object-cover rounded-lg">
-                <video
-                  className="w-60 h-36 object-cover rounded-lg"
-                  autoPlay
-                  playsInline
-                  ref={(ref) => handleRemoteVideoRef(p.userId, ref)}
-                />
-                <Card
-                  shadow="none"
-                  isBlurred
-                  className="absolute bottom-0 left-0   text-xs m-2 text-black px-2"
-                >
-                  {p.name}
-                </Card>
-              </Card>
-            </div>
-          ))}
+        {peers.map((peer) => (
+          <div className="flex p-2" key={peer.peerId}>
+            <video
+              ref={(ref) => {
+                if (ref) {
+                  ref.srcObject = peer.stream;
+                }
+              }}
+              autoPlay
+              playsInline
+              className="w-64 h-48"
+            ></video>
+          </div>
+        ))}
       </div>
-
       {/* chat and participants */}
       {controls.isSettingsOn && (
         <div className="absolute top-0 right-0">
