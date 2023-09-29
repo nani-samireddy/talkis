@@ -7,7 +7,6 @@ import { Card } from "@nextui-org/react";
 import { useControls } from "../contexts/controlsContext";
 import { useRoomInfo } from "../contexts/roomInfoContext";
 import VideoPlayer from "../components/videoPlayer";
-
 import { useUserDetails } from "../contexts/userContext";
 
 export default function Meet() {
